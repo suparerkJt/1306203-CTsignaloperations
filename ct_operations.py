@@ -4,7 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="1306203/Time Operations on Signals",
+    page_title="1306203/Time Operations on Continuous-Time Signals",
     layout="wide",
 )
 
