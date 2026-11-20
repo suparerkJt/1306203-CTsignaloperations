@@ -405,12 +405,12 @@ const PARAMS=[
 ];
 
 const DESCS={
-    step:"u(t) = 1 for t ≥ 0 and 0 for t &lt; 0."
+    step:"u(t) = 1 for t ≥ 0 and 0 for t &lt; 0.",
+    rev:"x(−t) is the mirror image of x(t) about t = 0."
 };
 
 const proto={type:"ramp", a:1, f:0.5, k:0, A:2};
-const op={on:{shift:true,rev:false,scale:false}, T0:3, alpha:2};
-const isOn=(state,id)=>state===op?!!op.on[id]:state.type===id;
+const op={type:"shift", T0:3, alpha:2};
 
 const view={tmin:-8, tmax:8, auto:true, ymin:-1, ymax:1};
 
@@ -422,7 +422,7 @@ function buildCard(cardId,title,items,order,group,state){
 
     const card=$(cardId);
 
-    let h='<h3>'+title+'</h3>'+(group==="op"?'<div style="font-size:12px;opacity:.75;margin:-4px 0 8px">Select one or more — they are applied together.</div>':'')+'<div class="tiles">';
+    let h='<h3>'+title+'</h3><div class="tiles">';
 
     order.forEach((id,i)=>{
         const wide=(order.length%2===1&&i===order.length-1)?' style="grid-column:1 / -1"':'';
@@ -454,8 +454,7 @@ function buildCard(cardId,title,items,order,group,state){
 
     card.querySelectorAll(".tile").forEach(el=>{
         el.addEventListener("click",()=>{
-            if(state===op) op.on[el.dataset.type]=!op.on[el.dataset.type];
-            else state.type=el.dataset.type;
+            state.type=el.dataset.type;
             refreshCard(cardId,state);
             render();
         });
@@ -487,11 +486,11 @@ function refreshCard(cardId,state){
     const card=$(cardId);
 
     card.querySelectorAll(".tile").forEach(el=>{
-        el.classList.toggle("active",isOn(state,el.dataset.type));
+        el.classList.toggle("active",el.dataset.type===state.type);
     });
 
     card.querySelectorAll(".param, .desc[data-for]").forEach(el=>{
-        el.classList.toggle("show",el.dataset.for.split(" ").some(id=>isOn(state,id)));
+        el.classList.toggle("show",el.dataset.for.split(" ").includes(state.type));
     });
 }
 
@@ -615,12 +614,10 @@ function xBase(t){
 }
 
 // argument of x(.) for the chosen time operation
-function factor(){
-    return (op.on.rev?-1:1)*(op.on.scale?op.alpha:1);
-}
 function argOf(t){
-    const d=op.on.shift?op.T0:0;
-    return factor()*(t-d);
+    if(op.type==="shift") return t-op.T0;
+    if(op.type==="rev")   return -t;
+    return op.alpha*t;
 }
 
 function yBase(t){ return xBase(argOf(t)); }
@@ -641,14 +638,14 @@ function protoEq(){
 // argument written as text, e.g. "t − 3", "−t", "2t"
 function argText(){
 
-    const f=factor(), d=op.on.shift?op.T0:0;
-    const inner=d===0?"t":(d>0?"t − "+num(d):"t + "+num(-d));
+    if(op.type==="shift"){
+        if(op.T0===0) return "t";
+        return op.T0>0?"t − "+num(op.T0):"t + "+num(-op.T0);
+    }
 
-    if(f===1) return inner;
+    if(op.type==="rev") return "−t";
 
-    if(d===0) return f===-1?"−t":num(f)+"t";
-
-    return (f===-1?"−":num(f))+"("+inner+")";
+    return num(op.alpha)+"t";
 }
 
 // the prototype's formula with t replaced by the argument
@@ -663,40 +660,29 @@ function substituted(arg){
 }
 
 function opName(){
-
-    const n=[];
-    if(op.on.scale) n.push("time scaling");
-    if(op.on.rev)   n.push("time reversal");
-    if(op.on.shift) n.push("time shifting");
-
-    return n.length?n.join(" + "):"no operation";
+    if(op.type==="shift") return "time shifting";
+    if(op.type==="rev")   return "time reversal";
+    return "time scaling";
 }
 
 function opNote(){
 
-    const out=[];
-
-    if(op.on.scale){
-        const a=Math.abs(op.alpha);
-        let t;
-        if(a>1) t="compressed in time by a factor of "+num(a);
-        else if(a<1) t="stretched in time by a factor of "+num(1/a);
-        else t="not scaled (|α| = 1)";
-        out.push("Scaling: the signal is "+t+(op.alpha<0?" and also reversed (α is negative)":"")+".");
+    if(op.type==="shift"){
+        if(op.T0>0) return "x(t) is delayed: the whole shape moves to the right by "+num(op.T0)+" s.";
+        if(op.T0<0) return "x(t) is advanced: the whole shape moves to the left by "+num(-op.T0)+" s.";
+        return "T₀ = 0, so the signal is unchanged.";
     }
 
-    if(op.on.rev) out.push("Reversal: mirrored about t = 0.");
+    if(op.type==="rev") return "The signal is mirrored about t = 0 (left and right are swapped).";
 
-    if(op.on.shift){
-        if(op.T0>0) out.push("Shifting: the result is delayed (moved right) by "+num(op.T0)+" s.");
-        else if(op.T0<0) out.push("Shifting: the result is advanced (moved left) by "+num(-op.T0)+" s.");
-        else out.push("Shifting: T₀ = 0, so no shift.");
-    }
+    const a=Math.abs(op.alpha);
+    let s="";
 
-    if(!out.length) return "No operation selected, so y(t) = x(t).";
-    if(out.length>1) out.push("Order: scale/reverse first, then shift, i.e. y(t) = x(±α(t − T₀)).");
+    if(a>1) s="compressed in time by a factor of "+num(a);
+    else if(a<1) s="stretched in time by a factor of "+num(1/a);
+    else s="not scaled (|α| = 1)";
 
-    return out.join(" ");
+    return "The signal is "+s+(op.alpha<0?" and also reversed (α is negative)":"")+".";
 }
 
 // ======================================
@@ -720,7 +706,7 @@ function sample(){
     let n=4000;
 
     if(proto.type==="cos"){
-        const scale=Math.abs(factor());
+        const scale=op.type==="scale"?Math.abs(op.alpha):1;
         n=Math.min(40000,Math.max(4000,Math.ceil(span*proto.f*scale*40)));
     }
 
