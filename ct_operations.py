@@ -4,7 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="1306203/Time Operations on CT Signals",
+    page_title="Time Operations on Signals",
     layout="wide",
 )
 
@@ -303,7 +303,7 @@ html = r"""
 
 <button class="theme" id="theme">🌙 DARK MODE</button>
 
-<h2>1306203 Signals & Systems: Time Operations on a Continuous-Time Signal</h2>
+<h2>Time Operations on a Continuous-Time Signal</h2>
 <div class="subtitle">Choose a prototype x(t) and a time operation: shifting, reversal or scaling</div>
 
 <div class="layout">
@@ -390,9 +390,11 @@ const OPS={
     rev:  {label:"Time reversal<br>x(−t)",
            path:"M2 14 H38 M10 7 L2 14 L10 21 M30 7 L38 14 L30 21"},
     scale:{label:"Time scaling<br>x(αt)",
-           path:"M8 22 V6 M32 22 V6 M8 14 H32 M14 8 L8 14 L14 20 M26 8 L32 14 L26 20"}
+           path:"M8 22 V6 M32 22 V6 M8 14 H32 M14 8 L8 14 L14 20 M26 8 L32 14 L26 20"},
+    combo:{label:"Shifting + scaling<br>x(αt + T<sub>0</sub>)",
+           path:"M3 14 H25 M19 8 L26 14 L19 20 M30 6 V22 M37 6 V22"}
 };
-const OP_ORDER=["shift","rev","scale"];
+const OP_ORDER=["shift","rev","scale","combo"];
 
 // adjustable parameters; "group" says which card they belong to
 const PARAMS=[
@@ -400,17 +402,17 @@ const PARAMS=[
     {g:"proto",p:"f",    label:"Frequency f (Hz)",             types:["cos"],   min:0,    max:20,  step:0.1},
     {g:"proto",p:"k",    label:"Phase factor k  (φ = k·π)",    types:["cos"],   min:-100, max:100, step:0.1},
     {g:"proto",p:"A",    label:"Parameter A",                  types:["ramp"],  min:0.1,  max:20,  step:0.1},
-    {g:"op",   p:"T0",   label:"Shift T<sub>0</sub> (s)",      types:["shift"], min:-50,  max:50,  step:0.1},
-    {g:"op",   p:"alpha",label:"Scale factor α (α ≠ 0)",       types:["scale"], min:-20,  max:20,  step:0.1, nonzero:true}
+    {g:"op",   p:"T0",   label:"Shift T<sub>0</sub> (s)",      types:["shift","combo"], min:-50,  max:50,  step:0.1},
+    {g:"op",   p:"alpha",label:"Scale factor α (α ≠ 0)",       types:["scale","combo"], min:-20,  max:20,  step:0.1, nonzero:true}
 ];
 
 const DESCS={
-    step:"u(t) = 1 for t ≥ 0 and 0 for t &lt; 0.",
-    rev:"x(−t) is the mirror image of x(t) about t = 0."
+    step:"u(t) = 1 for t ≥ 0 and 0 for t &lt; 0."
 };
 
 const proto={type:"ramp", a:1, f:0.5, k:0, A:2};
 const op={type:"shift", T0:3, alpha:2};
+const isOn=(state,id)=>state.type===id;
 
 const view={tmin:-8, tmax:8, auto:true, ymin:-1, ymax:1};
 
@@ -422,7 +424,7 @@ function buildCard(cardId,title,items,order,group,state){
 
     const card=$(cardId);
 
-    let h='<h3>'+title+'</h3><div class="tiles">';
+    let h='<h3>'+title+'</h3>'+(group==="op"?'<div style="font-size:12px;opacity:.75;margin:-4px 0 8px">Choose one operation at a time.</div>':'')+'<div class="tiles">';
 
     order.forEach((id,i)=>{
         const wide=(order.length%2===1&&i===order.length-1)?' style="grid-column:1 / -1"':'';
@@ -486,11 +488,11 @@ function refreshCard(cardId,state){
     const card=$(cardId);
 
     card.querySelectorAll(".tile").forEach(el=>{
-        el.classList.toggle("active",el.dataset.type===state.type);
+        el.classList.toggle("active",isOn(state,el.dataset.type));
     });
 
     card.querySelectorAll(".param, .desc[data-for]").forEach(el=>{
-        el.classList.toggle("show",el.dataset.for.split(" ").includes(state.type));
+        el.classList.toggle("show",el.dataset.for.split(" ").some(id=>isOn(state,id)));
     });
 }
 
@@ -617,7 +619,8 @@ function xBase(t){
 function argOf(t){
     if(op.type==="shift") return t-op.T0;
     if(op.type==="rev")   return -t;
-    return op.alpha*t;
+    if(op.type==="scale") return op.alpha*t;
+    return op.alpha*t+op.T0;
 }
 
 function yBase(t){ return xBase(argOf(t)); }
@@ -645,7 +648,11 @@ function argText(){
 
     if(op.type==="rev") return "−t";
 
-    return num(op.alpha)+"t";
+    const at=op.alpha===1?"t":(op.alpha===-1?"−t":num(op.alpha)+"t");
+
+    if(op.type==="scale"||op.T0===0) return at;
+
+    return at+(op.T0>0?" + "+num(op.T0):" − "+num(-op.T0));
 }
 
 // the prototype's formula with t replaced by the argument
@@ -662,7 +669,17 @@ function substituted(arg){
 function opName(){
     if(op.type==="shift") return "time shifting";
     if(op.type==="rev")   return "time reversal";
-    return "time scaling";
+    if(op.type==="scale") return "time scaling";
+    return "time shifting + scaling";
+}
+
+function scaleNote(){
+    const a=Math.abs(op.alpha);
+    let t;
+    if(a>1) t="compressed in time by a factor of "+num(a);
+    else if(a<1) t="stretched in time by a factor of "+num(1/a);
+    else t="not scaled (|α| = 1)";
+    return "The signal is "+t+(op.alpha<0?" and also reversed (α is negative)":"")+".";
 }
 
 function opNote(){
@@ -675,14 +692,11 @@ function opNote(){
 
     if(op.type==="rev") return "The signal is mirrored about t = 0 (left and right are swapped).";
 
-    const a=Math.abs(op.alpha);
-    let s="";
+    if(op.type==="scale") return scaleNote();
 
-    if(a>1) s="compressed in time by a factor of "+num(a);
-    else if(a<1) s="stretched in time by a factor of "+num(1/a);
-    else s="not scaled (|α| = 1)";
-
-    return "The signal is "+s+(op.alpha<0?" and also reversed (α is negative)":"")+".";
+    const d=-op.T0/op.alpha;
+    return scaleNote()+" Since x(αt + T₀) = x(α(t + T₀/α)), the scaled shape is also shifted by "+
+           num(d)+" s (T₀/α = "+num(op.T0/op.alpha)+", moved "+(d>0?"right":d<0?"left":"nowhere")+").";
 }
 
 // ======================================
@@ -706,7 +720,7 @@ function sample(){
     let n=4000;
 
     if(proto.type==="cos"){
-        const scale=op.type==="scale"?Math.abs(op.alpha):1;
+        const scale=(op.type==="scale"||op.type==="combo")?Math.abs(op.alpha):1;
         n=Math.min(40000,Math.max(4000,Math.ceil(span*proto.f*scale*40)));
     }
 
